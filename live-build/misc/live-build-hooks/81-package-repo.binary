@@ -38,8 +38,8 @@ chroot binary /pkgrepo/prepare-debs.sh
 # output:
 #  bash (= 4.4.18-2ubuntu1), bc (= 1.07.1-2)
 #
-DEPENDS="$(cat binary/pkgrepo/all-packages.list | \
-    tr '\n' ' ' |  sed 's/ *$/)/' | sed 's/ /), /g' | sed 's/=/ (= /g')"
+DEPENDS="$(tr '\n' ' ' <binary/pkgrepo/all-packages.list |
+	sed 's/ *$/)/' | sed 's/ /), /g' | sed 's/=/ (= /g')"
 
 #
 # build the delphix-entire meta-pacakge
@@ -60,13 +60,13 @@ gpg --import --batch --passphrase delphix $MISC/dlpx-test-priv.gpg
 # (Issue: https://github.com/aptly-dev/aptly/issues/657)
 # (Workaround: https://d.sb/2016/11/gpg-inappropriate-ioctl-for-device-errors)
 #
-cat > $HOME/.gnupg/gpg.conf <<EOF
+cat >"$HOME/.gnupg/gpg.conf" <<EOF
 use-agent
 pinentry-mode loopback
 default-key "Delphix Test"
 EOF
 
-echo "allow-loopback-pinentry" > $HOME/.gnupg/gpg-agent.conf
+echo "allow-loopback-pinentry" >"$HOME/.gnupg/gpg-agent.conf"
 
 #
 # Create the private repository, put all the debs into it, and finally publish
@@ -79,7 +79,8 @@ aptly repo add dlpx-repo delphix-entire*.deb
 aptly snapshot create dlpx-repo-1 from repo dlpx-repo
 aptly publish snapshot -batch -passphrase=delphix dlpx-repo-1
 
-tar cf $APPLIANCE_VARIANT.repo -C $HOME/.aptly public -C $PWD/binary/pkgrepo \
-    all-packages.list delphix-packages.list apt-packages.list
+tar cf "${APPLIANCE_VARIANT}.repo" -C "$HOME/.aptly public" \
+	-C "$PWD/binary/pkgrepo" all-packages.list delphix-packages.list \
+	apt-packages.list
 
 rm -rf binary/pkgrepo

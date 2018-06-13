@@ -28,10 +28,10 @@ fi
 cd /pkgrepo
 
 for f in delphix-pkgs/*.deb; do
-	dpkg-deb -W --showformat '${Package}=${Version}\n' $f;
-done > delphix-packages.list
+	dpkg-deb -W --showformat "\${Package}=\${Version}\n" "$f";
+done >delphix-packages.list
 
-dpkg-query -Wf '${Package}=${Version}\n' > all-packages.list
+dpkg-query -Wf "\${Package}=\${Version}\n" >all-packages.list
 
 #
 # comm requires lists to be sorted
@@ -54,7 +54,7 @@ fi
 # through apt via various live-build stages. We pass them to apt to
 # fetch all the debs
 #
-comm -23 all-packages.list delphix-packages.list > apt-packages.list
+comm -23 all-packages.list delphix-packages.list >apt-packages.list
 
 mkdir -p apt-pkgs
 (cd apt-pkgs && xargs -a ../apt-packages.list apt download)
