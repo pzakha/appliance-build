@@ -30,10 +30,12 @@ RUN \
   apt-get update && \
   apt-get install -y \
       ansible \
+      aptly \
       livecd-rootfs \
       zfsutils-linux \
       awscli \
       coreutils \
+      equivs \
       gdisk \
       git \
       jq \
