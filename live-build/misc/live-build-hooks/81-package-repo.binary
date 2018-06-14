@@ -81,7 +81,7 @@ aptly repo add dlpx-repo delphix-entire*.deb
 aptly snapshot create dlpx-repo-1 from repo dlpx-repo
 aptly publish snapshot -batch -passphrase=delphix dlpx-repo-1
 
-tar cf "${APPLIANCE_VARIANT}.repo" -C "$HOME/.aptly public" \
+tar cf "${APPLIANCE_VARIANT}.repo" -C "$HOME/.aptly" public \
 	-C "$PWD/binary/pkgrepo" all-packages.list delphix-packages.list \
 	apt-packages.list
 
