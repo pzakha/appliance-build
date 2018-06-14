@@ -70,8 +70,10 @@ echo "allow-loopback-pinentry" >"$HOME/.gnupg/gpg-agent.conf"
 
 #
 # Create the private repository, put all the debs into it, and finally publish
-# it (into ~/.aptly/public by default)
+# it (into ~/.aptly/public by default).
+# We first clear any remnants from the previous run
 #
+rm -rf "$HOME/.aptly"
 aptly repo create -distribution=bionic -component=dlpx dlpx-repo
 aptly repo add dlpx-repo binary/pkgrepo/apt-pkgs
 aptly repo add dlpx-repo binary/pkgrepo/delphix-pkgs

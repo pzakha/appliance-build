@@ -28,10 +28,10 @@ fi
 cd /pkgrepo
 
 for f in delphix-pkgs/*.deb; do
-	dpkg-deb -W --showformat "\${Package}=\${Version}\n" "$f";
+	dpkg-deb -W --showformat "\${Package}=\${Version}\\n" "$f"
 done >delphix-packages.list
 
-dpkg-query -Wf "\${Package}=\${Version}\n" >all-packages.list
+dpkg-query -Wf "\${Package}=\${Version}\\n" >all-packages.list
 
 #
 # comm requires lists to be sorted
