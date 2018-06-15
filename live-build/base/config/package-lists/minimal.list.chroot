@@ -43,3 +43,9 @@ open-vm-tools
 openssh-server
 ubuntu-minimal
 auditd
+
+#
+# The following package is used by live-build itself and must be present
+# in our seed repository.
+#
+dctrl-tools
