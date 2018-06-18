@@ -30,6 +30,7 @@ RUN \
   apt-get update && \
   apt-get install -y \
       ansible \
+      aptitude \
       aptly \
       debhelper \
       debootstrap \
@@ -47,6 +48,7 @@ RUN \
       lintian \
       make \
       man \
+      rename \
       shellcheck \
       vim && \
   rm -rf /var/lib/apt/lists/*
