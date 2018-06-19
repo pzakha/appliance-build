@@ -27,14 +27,21 @@
 # are run.
 #
 lb config noauto \
-	--archive-areas "main restricted universe multiverse" \
-	--bootstrap-keyring ubuntu-keyring \
+	--parent-mirror-bootstrap "$SEED_REPOSITORY" \
+	--mirror-bootstrap "$SEED_REPOSITORY" \
+	--parent-mirror-binary "$SEED_REPOSITORY" \
+	--mirror-binary "" \
+	--volatile false \
+	--security false \
+	--debug \
+	--archive-areas dlpx \
 	--bootstrap-flavour minimal \
 	--chroot-filesystem none \
 	--architectures amd64 \
 	--distribution bionic \
 	--binary-images none \
 	--bootloader none \
+	--memtest none \
 	--system normal \
 	--mode ubuntu \
 	"${@}"

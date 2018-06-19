@@ -37,6 +37,16 @@ if [[ "$1" != "base" ]] && [[ ! -d "live-build/variants/$1" ]]; then
 	exit 1
 fi
 
+#
+# We assume that the seed repository is served on port 8080 by caller
+#
+export SEED_REPOSITORY="http://localhost:8080/"
+if ! curl --output /dev/null --silent --head --fail \
+	"$SEED_REPOSITORY/dists/bionic/InRelease"; then
+	echo "Repository not found at $SEED_REPOSITORY"
+	exit 1
+fi
+
 set -o errexit
 
 #
@@ -137,6 +147,7 @@ if ! [[ -n "$CI" && -n "$TRAVIS" ]]; then
 fi
 
 lb config
+export DEBOOTSTRAP_OPTIONS="--keyring=$TOP/live-build/misc/live-build-hooks/misc/dlpx-test-pub.gpg"
 lb build
 
 #
