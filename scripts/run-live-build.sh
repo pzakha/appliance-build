@@ -84,7 +84,7 @@ function get_s3_uri() {
 		#
 		# prefix is empty, so get latest version
 		#
-		aws s3 cp "$latest" .
+		aws s3 cp --quiet "$latest" .
 		prefix=$(cat latest)
 		uri="s3://$def_bucket/$prefix"
 		rm -f latest
