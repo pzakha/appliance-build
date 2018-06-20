@@ -122,6 +122,23 @@ echo "dctrl-tools" | download_pkgs "$TMP_DIRECTORY"
 rename 's/\%3a/:/g' "$TMP_DIRECTORY"/*.deb
 
 #
+# Until we can confirm otherwise, the Aptly repository needs to be signed
+# in order for us to use it as the bootstrap mirror to live-build. Thus,
+# we need to configure GPG so that we can later use it to sign the Aptly
+# repository.
+#
+gpg --import --batch --passphrase delphix \
+	$TOP/live-build/misc/live-build-hooks/misc/dlpx-test-priv.gpg
+
+cat >"$HOME/.gnupg/gpg.conf" <<EOF
+use-agent
+pinentry-mode loopback
+default-key "Delphix Test"
+EOF
+
+echo "allow-loopback-pinentry" >"$HOME/.gnupg/gpg-agent.conf"
+
+#
 # And now, we can create the Aptly repository using all of the .deb
 # packages that were download previously, plus our metapackages.
 #
@@ -133,7 +150,7 @@ aptly repo add seed-repository "$TMP_DIRECTORY"
 aptly repo add seed-repository "$TOP/delphix-foundation_1.0.0_amd64.deb"
 
 aptly snapshot create seed-repository-snapshot from repo seed-repository
-aptly publish snapshot -skip-signing seed-repository-snapshot
+aptly publish snapshot -passphrase=delphix seed-repository-snapshot
 
 tar -czf "$TOP/artifacts/seed-repository.tar.gz" -C ~/.aptly .
 

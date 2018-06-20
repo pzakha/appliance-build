@@ -133,6 +133,7 @@ tar -xzf "$TOP/artifacts/seed-repository.tar.gz" -C ~/.aptly
 aptly serve &
 
 lb config
+export DEBOOTSTRAP_OPTIONS="--keyring=$TOP/live-build/misc/live-build-hooks/misc/dlpx-test-pub.gpg"
 lb build
 
 #

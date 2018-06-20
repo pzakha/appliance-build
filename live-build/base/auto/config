@@ -33,7 +33,6 @@ lb config noauto \
 	--mirror-binary "" \
 	--volatile false \
 	--security false \
-	--apt-secure false \
 	--debug \
 	--archive-areas "delphix" \
 	--bootstrap-keyring ubuntu-keyring \
