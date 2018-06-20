@@ -39,7 +39,7 @@ all-variants: $(ALL_VARIANTS)
 all-internal: $(ALL_INTERNAL)
 all-external: $(ALL_EXTERNAL)
 
-base:
+base: seed-repository
 	./scripts/run-live-build.sh $@
 
 $(ALL_VARIANTS): base
