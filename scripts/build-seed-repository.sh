@@ -15,15 +15,6 @@
 # limitations under the License.
 #
 
-function list_depends_of_deb
-{
-	dpkg -I "$1" |
-		grep Depends |
-		cut -d ':' -f 2 |
-		tr -d '[:blank:]' |
-		tr ',' '\n'
-}
-
 function list_essential_pkgs
 {
 	aptitude search \
@@ -48,15 +39,17 @@ function germinate_seed_pkgs
 	done
 
 	germinate --seed-source . \
+		--arch amd64 \
 		--components main,restricted,universe,multiverse \
 		--mirror http://archive.ubuntu.com/ubuntu \
 		--mirror http://security.ubuntu.com/ubuntu \
-		&>/dev/null
+		--mirror http://localhost:8080 \
+		&>"$TMP_DIRECTORY/germinate.output"
 
 	tail -n +3 seeds | head -n -2 | cut -d '|' -f 1
 
 	popd &>/dev/null
-	rm -rf "$TMP_DIRECTORY"
+	#rm -rf "$TMP_DIRECTORY"
 }
 
 function download_pkgs
@@ -80,12 +73,7 @@ function download_delphix_s3_debs
 	aws s3 sync --only-show-errors "$S3_URI" .
 	sha256sum -c --strict SHA256SUMS
 
-	for deb in *.deb; do
-		list_depends_of_deb "$deb" |
-			germinate_seed_pkgs |
-			download_pkgs "$DOWNLOAD_DIR"
-		cp "$deb" "$DOWNLOAD_DIR"
-	done
+	mv *.deb "$DOWNLOAD_DIR/"
 
 	popd &>/dev/null
 	rm -rf "$TMP_DIRECTORY"
@@ -116,13 +104,38 @@ function download_delphix_java8_debs
 	runuser -u nobody -- \
 		fakeroot make-jpkg --jce-policy "$JCEFILE" "$TARFILE" <<< y
 
-	list_depends_of_deb "$DEBFILE" |
-		germinate_seed_pkgs |
-		download_pkgs "$DOWNLOAD_DIR"
+	chown root:root "$DEBFILE"
 	cp "$DEBFILE" "$DOWNLOAD_DIR"
 
 	popd &>/dev/null
 	rm -rf "$TMP_DIRECTORY"
+}
+
+function aptly_serve
+{
+	aptly serve &
+	echo $! > /tmp/aptly_serve.pid
+
+	local url="http://localhost:8080/dists/bionic/Release"
+	local attempts=0
+
+	while ! curl --output /dev/null --silent --head --fail "$url"; do
+		sleep 1
+		(( attempts = attempts + 1 ))
+		if [[ $attempts -gt 10 ]]; then
+			echo "Error: aptly serve timeout"
+			aptly_stop_serving
+			exit 1
+		fi
+	done
+}
+
+function aptly_stop_serving
+{
+	if [[ -f /tmp/aptly_serve.pid ]]; then
+		kill $(cat /tmp/aptly_serve.pid)
+		rm /tmp/aptly_serve.pid
+	fi
 }
 
 TOP=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -137,65 +150,12 @@ set -o errexit
 set -o pipefail
 
 TMP_DIRECTORY=$(mktemp -d -p "$PWD" tmp.pkgs.XXXXXXXXXX)
-mkdir "$TMP_DIRECTORY/partial"
+DELPHIX_DEBS="$TMP_DIRECTORY/delphix-debs"
+ALL_DEBS="$TMP_DIRECTORY/all-debs"
+COMPONENTS="$TMP_DIRECTORY/components"
+mkdir "$DELPHIX_DEBS" "$ALL_DEBS"
 
-#
-# Before we attempt to fetch any of the packages, we want to ensure our
-# apt cache is up-to-date; otherwise we could fetch old packages, or
-# simply not find any packages to fetch because the cache is empty.
-#
 apt-get update
-
-#
-# First, we want to download all recursive dependencies for our
-# foundation package.
-#
-list_depends_of_deb "$TOP/delphix-foundation_1.0.0_amd64.deb" |
-	germinate_seed_pkgs |
-	download_pkgs "$TMP_DIRECTORY"
-
-#
-# Next, we need to ensure we download and include all essential
-# packages, since these are necessary for a working system, but are not
-# necessarily listed as dependencies of our foundation; e.g. coreutils.
-#
-list_essential_pkgs | download_pkgs "$TMP_DIRECTORY"
-
-#
-# Lastly, there's some additional packages that we need to include, as
-# these are required by our live-build execution environment.
-#
-cat <<EOF | germinate_seed_pkgs | download_pkgs "$TMP_DIRECTORY"
-dctrl-tools
-python3-apt
-EOF
-
-#
-# When performing minimal testing from within Travis CI, we won't have
-# access to the Delphix internal infrastructure. Thus, we want to skip
-# the logic below, as it would otherwise fail when running in Travis.
-# The assumption being, we will never attempt to build a variant that
-# dependends on the Delphix S3 packages, when running in Travis.
-#
-if ! [[ -n "$CI" && -n "$TRAVIS" ]]; then
-	download_delphix_java8_debs "$TMP_DIRECTORY"
-	[[ -n "$AWS_S3_URI_VIRTUALIZATION" ]] && \
-		download_delphix_s3_debs "$TMP_DIRECTORY" "$AWS_S3_URI_VIRTUALIZATION"
-	[[ -n "$AWS_S3_URI_MASKING" ]] && \
-		download_delphix_s3_debs "$TMP_DIRECTORY" "$AWS_S3_URI_MASKING"
-	[[ -n "$AWS_S3_URI_ZFS" ]] && \
-		download_delphix_s3_debs "$TMP_DIRECTORY" "$AWS_S3_URI_ZFS"
-fi
-
-#
-# After downloading the packages, the package filenames any have the
-# sequence of characters "%3a" embedded in them. These characters cause
-# problems when the files are exported over HTTP via the Aptly served
-# repository. Thus, we convert this sequence back to the original ":"
-# character (which is what the sequence represents) as a workaround, so
-# the files can be properly served by Aptly.
-#
-rename 's/\%3a/:/g' "$TMP_DIRECTORY"/*.deb
 
 #
 # Until we can confirm otherwise, the Aptly repository needs to be signed
@@ -215,19 +175,123 @@ EOF
 echo "allow-loopback-pinentry" >"$HOME/.gnupg/gpg-agent.conf"
 
 #
+# Create an aptly repository to hold our downloaded debs. This repository
+# will be first used by germinate to gather the dependencies of those debs
+# and then by apt when downloading the debs.
+# Note, we must use component=main here since for each component germinate
+# expects to find at least one repository that has source packages
+# (i.e. <repo>/dists/bionic/<component>/source/Sources.* must exist), but
+# we do not publish any source packages for delphix debs.
+#
+rm -rf ~/.aptly
+aptly repo create -distribution=bionic -component=main delphix-debs
+
+mv "$TOP/delphix-foundation_1.0.0_amd64.deb" "$DELPHIX_DEBS/"
+echo "delphix-foundation" >> "$COMPONENTS"
+
+#
+# When performing minimal testing from within Travis CI, we won't have
+# access to the Delphix internal infrastructure. Thus, we want to skip
+# the logic below, as it would otherwise fail when running in Travis.
+# The assumption being, we will never attempt to build a variant that
+# dependends on the Delphix S3 packages, when running in Travis.
+#
+if ! [[ -n "$CI" && -n "$TRAVIS" ]]; then
+	if [[ -n "$AWS_S3_URI_JAVA" ]]; then
+		download_delphix_s3_debs "$DELPHIX_DEBS" "$AWS_S3_URI_JAVA"
+	else
+		download_delphix_java8_debs "$DELPHIX_DEBS"
+	fi
+	echo "oracle-java8-jdk" >> "$COMPONENTS"
+	if [[ -n "$AWS_S3_URI_VIRTUALIZATION" ]]; then
+		download_delphix_s3_debs "$DELPHIX_DEBS" "$AWS_S3_URI_VIRTUALIZATION"
+		echo "delphix-virtualization" >> "$COMPONENTS"
+	fi
+	if [[ -n "$AWS_S3_URI_MASKING" ]]; then
+		download_delphix_s3_debs "$DELPHIX_DEBS" "$AWS_S3_URI_MASKING"
+		echo "delphix-masking" >> "$COMPONENTS"
+	fi
+	if [[ -n "$AWS_S3_URI_ZFS" ]]; then
+		download_delphix_s3_debs "$DELPHIX_DEBS" "$AWS_S3_URI_ZFS"
+		echo "delphix-zfs" >> "$COMPONENTS"
+	fi
+fi
+
+aptly repo add delphix-debs "$DELPHIX_DEBS"
+aptly publish repo -passphrase=delphix delphix-debs
+aptly_serve
+
+apt-key add "$TOP/live-build/misc/live-build-hooks/misc/dlpx-test-pub.gpg"
+apt-add-repository "deb http://localhost:8080 bionic main"
+
+#
+# Add extra repositories
+#
+pushd "$TOP/live-build/base/config/archives/"
+for key in *.key; do
+	apt-key add "$key"
+done
+for list in *.list; do
+	grep -e '^deb' "$list" | while read source; do
+		apt-add-repository "$source"
+	done
+done
+popd
+
+#
+# Before we attempt to fetch any of the packages, we want to ensure our
+# apt cache is up-to-date; otherwise we could fetch old packages, or
+# simply not find any packages to fetch because the cache is empty.
+#
+apt-get update
+
+#
+# Download recursive dependencies for all pacakges
+#
+cat "$COMPONENTS" | germinate_seed_pkgs | download_pkgs "$ALL_DEBS"
+
+#
+# We don't need our temporary repository anymore since all the delphix
+# packages should now be in "$ALL_DEBS"
+#
+aptly_stop_serving
+apt-add-repository --remove "deb http://localhost:8080 bionic main"
+
+#
+# Next, we need to ensure we download and include all essential
+# packages, since these are necessary for a working system, but are not
+# necessarily listed as dependencies of our foundation; e.g. coreutils.
+#
+list_essential_pkgs | download_pkgs "$ALL_DEBS"
+
+#
+# Lastly, there's some additional packages that we need to include, as
+# these are required by our live-build execution environment.
+#
+cat <<EOF | germinate_seed_pkgs | download_pkgs "$ALL_DEBS"
+dctrl-tools
+python3-apt
+EOF
+
+#
+# After downloading the packages, the package filenames any have the
+# sequence of characters "%3a" embedded in them. These characters cause
+# problems when the files are exported over HTTP via the Aptly served
+# repository. Thus, we convert this sequence back to the original ":"
+# character (which is what the sequence represents) as a workaround, so
+# the files can be properly served by Aptly.
+#
+rename 's/\%3a/:/g' "$ALL_DEBS"/*.deb
+
+#
 # And now, we can create the Aptly repository using all of the .deb
 # packages that were download previously, plus our metapackages.
 #
-
 rm -rf ~/.aptly
 aptly repo create -distribution=bionic -component=delphix seed-repository
-
-aptly repo add seed-repository "$TMP_DIRECTORY"
-aptly repo add seed-repository "$TOP/delphix-foundation_1.0.0_amd64.deb"
-
-aptly snapshot create seed-repository-snapshot from repo seed-repository
-aptly publish snapshot -passphrase=delphix seed-repository-snapshot
+aptly repo add seed-repository "$ALL_DEBS"
+aptly publish repo -passphrase=delphix seed-repository
 
 tar -czf "$TOP/artifacts/seed-repository.tar.gz" -C ~/.aptly .
 
-rm -rf "$TMP_DIRECTORY"
+#rm -rf "$TMP_DIRECTORY"
