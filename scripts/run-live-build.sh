@@ -62,67 +62,6 @@ else
 fi
 
 #
-# When performing minimal testing from within Travis CI, we won't have
-# access to the Delphix internal infrastructure. Thus, we want to skip
-# the logic below, as it would otherwise fail when running in Travis.
-# The assumption being, we will never attempt to build a variant that
-# dependends on the Delphix S3 packages, when running in Travis.
-#
-if ! [[ -n "$CI" && -n "$TRAVIS" ]]; then
-	#
-	# If we're building any variant that depends on Delphix packages
-	# that are stored in S3, we need to provide certain environment
-	# variables that will be used to instruct the live-build logic
-	# where it can download these packages from S3. Generally these
-	# environment variables will be provided by our CI automation,
-	# but when a build is run outside of that CI environment (e.g.
-	# manually run by a developer, while making/testing changes)
-	# these environment variables will not be set.
-	#
-	# The following logic attempts to provide sane defaults for
-	# these required environment variables, such that a developer
-	# can more easily run the build manually, and not have to worry
-	# about these details.
-	#
-
-	BUCKET="snapshot-de-images"
-	JENKINSID="jenkins-ops"
-
-	if [[ -z "$AWS_S3_PREFIX_VIRTUALIZATION" ]]; then
-		URI="s3://$BUCKET/builds/$JENKINSID/dlpx-app-gate/"
-		URI+="projects/dx4linux/build-package/post-push/latest"
-
-		aws s3 cp "$URI" .
-		AWS_S3_PREFIX_VIRTUALIZATION=$(cat latest)
-		export AWS_S3_PREFIX_VIRTUALIZATION
-		export AWS_S3_BUCKET="snapshot-de-images"
-		rm -f latest
-	fi
-
-	if [[ -z "$AWS_S3_PREFIX_MASKING" ]]; then
-		URI="s3://$BUCKET/builds/$JENKINSID/dms-core-gate/"
-		URI+="master/build-package/post-push/latest"
-
-		aws s3 cp "$URI" .
-		AWS_S3_PREFIX_MASKING=$(cat latest)
-		export AWS_S3_PREFIX_MASKING
-		export AWS_S3_BUCKET="snapshot-de-images"
-		rm -f latest
-	fi
-
-	if [[ -z "$AWS_S3_PREFIX_ZFS" ]]; then
-		URI="s3://$BUCKET/builds/$JENKINSID/devops-gate/"
-		URI+="projects/dx4linux/zfs-package-build/master/post-push/latest"
-
-		aws s3 cp "$URI" .
-		AWS_S3_PREFIX_ZFS=$(cat latest)
-		export AWS_S3_PREFIX_ZFS
-		export AWS_S3_BUCKET="snapshot-de-images"
-		rm -f latest
-	fi
-fi
-
-#
 # TODO: Add some comments to explain what we're doing here. i.e. we want
 # to use this artifact as the "seed repository" for live-build, such
 # that live-build only pulls from this repository and not ubuntu's repo.
