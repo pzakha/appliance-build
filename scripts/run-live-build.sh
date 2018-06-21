@@ -69,11 +69,33 @@ fi
 rm -rf ~/.aptly
 mkdir -p ~/.aptly
 tar -xzf "$TOP/artifacts/seed-repository.tar.gz" -C ~/.aptly
+
 aptly serve &
+APTLY_SERVE_PID=$!
+
+#
+# We need to wait for the Aptly server to be ready before we proceed;
+# this can take a few seconds, so we retry until it succeeds.
+#
+tries=0
+while ! curl --output /dev/null --silent --head --fail \
+		"http://localhost:8080/dists/bionic/InRelease" && \
+		[[ $tries -lt 30 ]]; do
+	sleep 1
+	tries=$((tries + 1))
+done
+
+if ! curl --output /dev/null --silent --head --fail \
+		"http://localhost:8080/dists/bionic/InRelease"; then
+	echo "Timed out waiting for Aptly seed repository." 1>&2
+	exit 1
+fi
 
 lb config
 export DEBOOTSTRAP_OPTIONS="--keyring=$TOP/live-build/misc/live-build-hooks/misc/dlpx-test-pub.gpg"
 lb build
+
+kill $APTLY_SERVE_PID
 
 #
 # On failure, the "lb build" command above doesn't actually return a
