@@ -43,8 +43,10 @@ RUN \
       gdisk \
       germinate \
       git \
+      java-package \
       jq \
       kpartx \
+      libxt6 \
       lintian \
       make \
       man \

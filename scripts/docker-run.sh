@@ -44,10 +44,9 @@ $DOCKER_RUN --rm \
 	--volume /dev:/dev \
 	--env CI \
 	--env TRAVIS \
-	--env AWS_S3_BUCKET \
-	--env AWS_S3_PREFIX_MASKING \
-	--env AWS_S3_PREFIX_VIRTUALIZATION \
-	--env AWS_S3_PREFIX_ZFS \
+	--env AWS_S3_URI_VIRTUALIZATION \
+	--env AWS_S3_URI_MASKING \
+	--env AWS_S3_URI_ZFS \
 	--env APPLIANCE_PASSWORD \
 	--env APPLIANCE_USERNAME \
 	--env AWS_ACCESS_KEY_ID \
