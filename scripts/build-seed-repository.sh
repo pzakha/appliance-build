@@ -162,11 +162,13 @@ list_depends_of_deb "$TOP/delphix-foundation_1.0.0_amd64.deb" |
 list_essential_pkgs | download_pkgs "$TMP_DIRECTORY"
 
 #
-# Lastly, we need to include the "dctrl-tools" package, since this is a
-# requirement of live-build, and is necessary to use the seed-repository
-# as the bootstrap-mirror input to live-build
+# Lastly, there's some additional packages that we need to include, as
+# these are required by our live-build execution environment.
 #
-echo "dctrl-tools" | download_pkgs "$TMP_DIRECTORY"
+cat <<EOF | germinate_seed_pkgs | download_pkgs "$TMP_DIRECTORY"
+dctrl-tools
+python3-apt
+EOF
 
 #
 # When performing minimal testing from within Travis CI, we won't have
