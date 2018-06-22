@@ -15,6 +15,15 @@
 # limitations under the License.
 #
 
+TOP=$(git rev-parse --show-toplevel 2>/dev/null)
+
+if [[ -z "$TOP" ]]; then
+	echo "Must be run inside the git repsitory."
+	exit 1
+fi
+
+. "$TOP/scripts/functions.sh"
+
 function list_essential_pkgs
 {
 	aptitude search \
@@ -110,40 +119,6 @@ function download_delphix_java8_debs
 	popd &>/dev/null
 	rm -rf "$TMP_DIRECTORY"
 }
-
-function aptly_serve
-{
-	aptly serve &
-	echo $! > /tmp/aptly_serve.pid
-
-	local url="http://localhost:8080/dists/bionic/Release"
-	local attempts=0
-
-	while ! curl --output /dev/null --silent --head --fail "$url"; do
-		sleep 1
-		(( attempts = attempts + 1 ))
-		if [[ $attempts -gt 10 ]]; then
-			echo "Error: aptly serve timeout"
-			aptly_stop_serving
-			exit 1
-		fi
-	done
-}
-
-function aptly_stop_serving
-{
-	if [[ -f /tmp/aptly_serve.pid ]]; then
-		kill $(cat /tmp/aptly_serve.pid)
-		rm /tmp/aptly_serve.pid
-	fi
-}
-
-TOP=$(git rev-parse --show-toplevel 2>/dev/null)
-
-if [[ -z "$TOP" ]]; then
-	echo "Must be run inside the git repsitory."
-	exit 1
-fi
 
 set -o xtrace
 set -o errexit
