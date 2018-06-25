@@ -15,6 +15,15 @@
 # limitations under the License.
 #
 
+TOP=$(git rev-parse --show-toplevel 2>/dev/null)
+
+if [[ -z "$TOP" ]]; then
+	echo "Must be run inside the git repsitory."
+	exit 1
+fi
+
+. "$TOP/scripts/functions.sh"
+
 if [[ ! -d binary/pkgrepo ]]; then
 	echo "Skipping package repo generation"
 	exit 0
@@ -50,26 +59,14 @@ sed -i "s/_DELPHIX_VERSION_/1.0.0-$(date '+%Y%m%dT%H%M%S')/" delphix-pkg-control
 equivs-build delphix-pkg-control
 
 #
-# Import the GPG key that will be used to sign the repository
+# We first need to tear down the delphix packages repository that was used by
+# the build.
 #
-gpg --import --batch --passphrase delphix $MISC/dlpx-test-priv.gpg
+aptly_stop_serving
+umount "$HOME/.aptly"
 
 #
-# Workaround due to aptly compatibility issues with gpg 2.1+ when trying to
-# provide passphrase non-interactively.
-# (Issue: https://github.com/aptly-dev/aptly/issues/657)
-# (Workaround: https://d.sb/2016/11/gpg-inappropriate-ioctl-for-device-errors)
-#
-cat >"$HOME/.gnupg/gpg.conf" <<EOF
-use-agent
-pinentry-mode loopback
-default-key "Delphix Test"
-EOF
-
-echo "allow-loopback-pinentry" >"$HOME/.gnupg/gpg-agent.conf"
-
-#
-# Create the private repository, put all the debs into it, and finally publish
+# Create the upgrade repository, put all the debs into it, and finally publish
 # it (into ~/.aptly/public by default).
 # We first clear any remnants from the previous run
 #

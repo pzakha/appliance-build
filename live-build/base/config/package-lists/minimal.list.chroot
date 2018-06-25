@@ -29,8 +29,7 @@ linux-tools-generic
 # that are leveraging ZFS as their root filesystem.
 #
 grub-pc
-zfs-initramfs
-zfsutils-linux
+delphix-zfs
 
 #
 # The following packages provide the minimal set of packages that are
@@ -43,3 +42,10 @@ open-vm-tools
 openssh-server
 ubuntu-minimal
 auditd
+
+#
+# XXX: testing
+#
+delphix-virtualization
+delphix-masking
+oracle-java8-jdk

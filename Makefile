@@ -38,7 +38,14 @@ all-variants: $(ALL_VARIANTS)
 all-internal: $(ALL_INTERNAL)
 all-external: $(ALL_EXTERNAL)
 
-base:
+base: delphix-repo
+	#
+	# We must first inform live-build to use the delphix repository. We do this
+	# dynamically to avoid duplicating the delphix key in multiple places.
+	#
+	cp keys/dlpx-test-pub.gpg live-build/base/config/archives/delphix.key
+	echo "deb http://localhost:8080 bionic main" \
+		>live-build/base/config/archives/delphix.list
 	./scripts/run-live-build.sh $@
 
 $(ALL_VARIANTS): base
@@ -50,6 +57,14 @@ $(ALL_VARIANTS): base
 	rm -f live-build/variants/$@/.build/binary_checksums
 	rm -f live-build/variants/$@/binary/SHA256SUMS
 	./scripts/run-live-build.sh $@
+
+#
+# Create a repository that contains our Delphix packages. Live-build will
+# fetch all Delphix packages from this repository, so we place the address
+# of the repository and its key to the appropriate location.
+#
+delphix-repo:
+	./scripts/build-delphix-repository.sh
 
 metapackages:
 	cd metapackages && germinate-update-metapackage --nodch
