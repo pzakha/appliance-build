@@ -42,10 +42,3 @@ open-vm-tools
 openssh-server
 ubuntu-minimal
 auditd
-
-#
-# XXX: testing
-#
-delphix-virtualization
-delphix-masking
-oracle-java8-jdk
