@@ -67,7 +67,7 @@ fi
 # We must serve delphix-repo as it will be used by live-build to install
 # Delphix packages.
 #
-aptly_serve "$TOP/delphix-repo/aptly.config"
+aptly_serve "$TOP/ancillary-repository/aptly.config"
 
 lb config
 lb build
