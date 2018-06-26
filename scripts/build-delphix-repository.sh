@@ -136,7 +136,7 @@ function build_delphix_java8_debs()
 	runuser -u nobody -- \
 		fakeroot make-jpkg --jce-policy "$JCEFILE" "$TARFILE" <<< y
 
-	chown $USER: "$DEBFILE"
+	chown root:root "$DEBFILE"
 	cp "$DEBFILE" "$TARGET_DIR"
 
 	popd &>/dev/null
@@ -175,5 +175,10 @@ aptly repo add delphix-debs "$PKG_DIRECTORY"
 aptly publish repo -passphrase=delphix delphix-debs
 mkdir -p "$TOP/delphix-repo"
 mv "$HOME/.aptly" "$TOP/delphix-repo/"
+cat <<-EOF >"$TOP/delphix-repo/aptly.config" 
+	{
+	  "rootDir": "$TOP/delphix-repo/.aptly"
+	}
+EOF
 
-rm -rf $PKG_DIRECTORY
+rm -rf "$PKG_DIRECTORY"

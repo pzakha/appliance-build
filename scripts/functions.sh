@@ -17,8 +17,17 @@
 
 function aptly_serve
 {
-	aptly serve &
-	echo $! > /run/aptly_serve.pid
+	local config="$1"
+
+	aptly_stop_serving
+
+	if [[ -n "$config" ]]; then
+		aptly serve -config="$config" &
+		echo $! > /run/aptly_serve.pid
+	else
+		aptly serve &
+		echo $! > /run/aptly_serve.pid
+	fi
 
 	#
 	# We need to wait for the Aptly server to be ready before we proceed;

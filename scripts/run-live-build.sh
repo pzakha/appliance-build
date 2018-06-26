@@ -64,15 +64,15 @@ else
 fi
 
 #
-# We bind mount the delphix repository into the default aptly location and then
-# serve it.
+# We must serve delphix-repo as it will be used by live-build to install
+# Delphix packages.
 #
-mkdir -p "$HOME/.aptly"
-mount --bind "$TOP/delphix-repo/.aptly" "$HOME/.aptly"
-aptly_serve
+aptly_serve "$TOP/delphix-repo/aptly.config"
 
 lb config
 lb build
+
+aptly_stop_serving
 
 #
 # On failure, the "lb build" command above doesn't actually return a
