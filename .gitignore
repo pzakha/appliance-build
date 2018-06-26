@@ -3,3 +3,5 @@
 *.tar.xz
 *.buildinfo
 *.changes
+
+ancillary-repository
