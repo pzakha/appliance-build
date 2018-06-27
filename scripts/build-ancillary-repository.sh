@@ -15,6 +15,20 @@
 # limitations under the License.
 #
 
+#
+# This script is intended to be used to build the "ancillary" repository
+# that is used when we run live-build to build our artifacts. Prior to
+# running live-build to build any of the appliance variants, this
+# ancillary repository must be created using this script.
+#
+# The ancillary repository is a directory containing an Aptly/APT
+# repository that can be used as the root directory to "aptly serve".
+# Further, this repository will contain all of the "first-party"
+# packages produced by Delphix, such that they can be easily installed
+# (and/or downloaded) via the live-build environment with normal APT
+# commands (e.g. apt install, apt download, etc).
+#
+
 TOP=$(git rev-parse --show-toplevel 2>/dev/null)
 
 if [[ -z "$TOP" ]]; then
@@ -130,6 +144,37 @@ function build_ancillary_repository()
 	EOF
 }
 
+#
+# The first-party packages produced by Delphix are stored in Amazon S3.
+# Thus, in order to populate the ancillary repository with these
+# packages, they must be downloaded from S3, so they can be then
+# inserted into the Aptly repository.
+#
+# Here, we determine the URI of each of the first-party packages, and
+# then use these URIs to download the packages later. Making this
+# determination is a little complex, and is dependent on the policy set
+# forth by the teams producing and storing the packages.
+#
+# With that said, there's three main methods of influencing the URI from
+# which the packages are downloaded:
+#
+# 1. If the package specific AWS_S3_URI environment variable is provided
+#    (e.g. AWS_S3_URI_VIRTUALIZATION), then this URI will be used to
+#    download the package. This is the simplest case, and enables the
+#    user of this script to directly influence this script.
+#
+# 2. If the package specific AWS_S3_PREFIX environment variable is
+#    provided (e.g. AWS_S3_PREFIX_VIRTUALIZATION), then this value is
+#    used to build the URI that will be used based on the default S3
+#    bucket that is used.
+#
+# 3. If nether the package specific AWS_S3_URI nor AWS_S3_PREFIX
+#    variables are provided, then logic kicks in to attempt to
+#    dynamically determine the URI of the most recently built package,
+#    and then uses that URI. This way, a naive user can not set any
+#    environment variables, and the script will work as expected.
+#
+
 AWS_S3_URI_VIRTUALIZATION=$(resolve_s3_uri \
 	"$AWS_S3_URI_VIRTUALIZATION" \
 	"$AWS_S3_PREFIX_VIRTUALIZATION" \
@@ -145,13 +190,37 @@ AWS_S3_URI_ZFS=$(resolve_s3_uri \
 	"$AWS_S3_PREFIX_ZFS" \
 	"devops-gate/projects/dx4linux/zfs-package-build/master/post-push/latest")
 
+#
+# All package files will be placed into this temporary directory, such
+# that we can later point Aptly at this directory to build the Aptly/APT
+# repository.
+#
 PKG_DIRECTORY=$(mktemp -d -p "$PWD" tmp.pkgs.XXXXXXXXXX)
 
+#
+# Now that we've determined the URI of all first-party packages, we can
+# proceed to download these packages.
+#
 download_delphix_s3_debs "$PKG_DIRECTORY" "$AWS_S3_URI_VIRTUALIZATION"
 download_delphix_s3_debs "$PKG_DIRECTORY" "$AWS_S3_URI_MASKING"
 download_delphix_s3_debs "$PKG_DIRECTORY" "$AWS_S3_URI_ZFS"
+
+#
+# The Delphix Java 8 package is handled a little differently than the
+# rest. This package file must be dynamically generated on the fly, from
+# some input file stored in Artifactory. This function will do this, and
+# then place the generated package file in the specified directory.
+#
 build_delphix_java8_debs "$PKG_DIRECTORY"
 
+#
+# Now that our temporary package directory has been populated with all
+# first-party packages needed by live-build, we use this directory to
+# build up our Aptly/APT ancillary repository. After this function
+# completes, there should be a directory named "ancillary-repository" at
+# the top level of the git repository, that can later be "aptly
+# serve"-ed and consumed by live-build.
+#
 build_ancillary_repository "$PKG_DIRECTORY"
 
 rm -rf "$PKG_DIRECTORY"
