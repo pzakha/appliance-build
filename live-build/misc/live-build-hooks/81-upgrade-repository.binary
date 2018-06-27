@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/bin/bash -eux
 #
 # Copyright 2018 Delphix
 #
@@ -15,21 +15,37 @@
 # limitations under the License.
 #
 
-TOP=$(git rev-parse --show-toplevel 2>/dev/null)
+#
+# This script is intended to be used as part of Delphix's build process.
+# It's role is to generate a tar archive that contains an Aptly/APT
+# repository of all of the packages that have been installed in the
+# live-build "binary" directory. The intention, is this archive can then
+# be used to upgrade an existing appliance, using the packages installed
+# in this particular variant build.
+#
 
-if [[ -z "$TOP" ]]; then
-	echo "Must be run inside the git repsitory."
-	exit 1
-fi
+set -o pipefail
 
 #
-# gather debs for all pacakges installed on the image.
+# Here, we generate a list of all of the packages that have been
+# installed in the "binary" chroot directory, including package version,
+# and then use this list to download each of these packages.
 #
-mkdir binary/packages
-# shellcheck disable=SC2016
-chroot binary bash -c \
-	'dpkg-query -Wf "\${Package}=\${Version}\\n" >/packages/all-packages.list'
-chroot binary bash -c "cd packages && xargs -a all-packages.list apt download"
+# We must perform the package download while chrooted in the binary
+# directory to ensure we use the same APT sources that were used when
+# installing the packages.
+#
+# This directory fully of download packages will later be passed to
+# Aptly to build our "upgrade repository".
+#
+chroot binary bash -eux <<'EOF'
+set -o pipefail
+
+mkdir -p /packages
+cd /packages
+
+dpkg-query -Wf '${Package}=${Version}\n' | xargs apt download
+EOF
 
 #
 # After downloading the packages, the package filenames any have the
@@ -42,41 +58,37 @@ chroot binary bash -c "cd packages && xargs -a all-packages.list apt download"
 rename 's/\%3a/:/g' binary/packages/*.deb
 
 #
-# convert all-packages.list to a format appropriate for the 'Depends'
-# section of a package definition.
+# Now we need to create the "delphix-entire" metapackage that will
+# depend on all of the packages that have been installed in the binary
+# chroot environment.
 #
-# Example input:
-#  bash=4.4.18-2ubuntu1
-#  bc=1.07.1-2
-# output:
-#  bash (= 4.4.18-2ubuntu1), bc (= 1.07.1-2)
-#
-DEPENDS="$(tr '\n' ' ' <binary/packages/all-packages.list |
-	sed 's/ *$/)/' | sed 's/ /), /g' | sed 's/=/ (= /g')"
+
+cp config/hooks/template.ctl delphix-entire.ctl
+
+# shellcheck disable=SC2016
+DEPENDS=$(chroot binary \
+	dpkg-query -Wf '${Package} (=${Version}), ' | sed 's/, $//')
+
+sed -i "s/@@DEPENDS@@/$DEPENDS/" delphix-entire.ctl
+sed -i "s/@@VARIANT@@/$APPLIANCE_VARIANT/" delphix-entire.ctl
+sed -i "s/@@DATE@@/$(date '+%Y%m%dT%H%M%S')/" delphix-entire.ctl
+
+equivs-build delphix-entire.ctl
 
 #
-# build the delphix-entire meta-pacakge
+# Lastly, we generate the Aptly/APT repository using the directory full
+# of packages previously downloaded, and the delphix-entire package that
+# was just generated.
 #
-cp config/hooks/delphix-entire-template delphix-entire-control
-sed -i "s/@@DEPENDS@@/${DEPENDS}/" delphix-entire-control
-sed -i "s/@@DELPHIX_VERSION@@/1.0.0-$(date '+%Y%m%dT%H%M%S')/" \
-	delphix-entire-control
-equivs-build delphix-entire-control
-rm delphix-entire-control
 
-#
-# Create the upgrade repository, put all the debs into it, and finally publish
-# it (into ~/.aptly/public by default).
-# We first clear any remnants from the previous run
-#
-rm -rf "$HOME/.aptly"
-aptly repo create -distribution=bionic -component=dlpx upgrade-repo
-aptly repo add upgrade-repo binary/packages
-aptly repo add upgrade-repo delphix-entire*.deb
-aptly publish repo -skip-signing upgrade-repo
-rm delphix-entire*.deb
+rm -rf ~/.aptly
+aptly repo create -distribution=bionic -component=delphix upgrade-repository
 
-tar cf "${APPLIANCE_VARIANT}.repo" -C "$HOME" .aptly \
-	-C "$PWD/binary/packages" all-packages.list
+aptly repo add upgrade-repository binary/packages
+aptly repo add upgrade-repository ./*.deb
+
+aptly publish repo -skip-signing upgrade-repository
+
+tar -cf "$APPLIANCE_VARIANT.repo" -C ~/.aptly .
 
 rm -rf binary/packages
