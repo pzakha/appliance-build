@@ -40,25 +40,25 @@ set -o xtrace
 set -o errexit
 set -o pipefail
 
-function resolve_s3_uri()
-{
+function resolve_s3_uri() {
 	local pkg_uri="$1"
 	local pkg_prefix="$2"
 	local latest_subprefix="$3"
 
 	local bucket="snapshot-de-images"
 	local jenkinsid="jenkins-ops"
+	local resolved_uri
 
 	if [[ -n "$pkg_uri" ]]; then
-		local resolved_uri="$pkg_uri"
+		resolved_uri="$pkg_uri"
 	elif [[ "$pkg_prefix" == s3* ]]; then
-		local resolved_uri="$pkg_prefix"
+		resolved_uri="$pkg_prefix"
 	elif [[ -n "$pkg_prefix" ]]; then
-		local resolved_uri="s3://$bucket/$pkg_prefix"
+		resolved_uri="s3://$bucket/$pkg_prefix"
 	elif [[ -n "$latest_subprefix" ]]; then
 		aws s3 cp --quiet \
 			"s3://$bucket/builds/$jenkinsid/$latest_subprefix" .
-		local resolved_uri="s3://$bucket/$(cat latest)"
+		resolved_uri="s3://$bucket/$(cat latest)"
 		rm -f latest
 	else
 		echo "Invalid arguments provided to resolve_s3_uri()" 2>&1
@@ -73,33 +73,33 @@ function resolve_s3_uri()
 	fi
 }
 
-function download_delphix_s3_debs()
-{
+function download_delphix_s3_debs() {
 	local pkg_directory="$1"
 	local S3_URI="$2"
+	local tmp_directory
 
-	local tmp_directory=$(mktemp -d -p "$PWD" tmp.s3-debs.XXXXXXXXXX)
+	tmp_directory=$(mktemp -d -p "$PWD" tmp.s3-debs.XXXXXXXXXX)
 	pushd "$tmp_directory" &>/dev/null
 
 	aws s3 sync --only-show-errors "$S3_URI" .
 	sha256sum -c --strict SHA256SUMS
 
-	mv *.deb "$pkg_directory/"
+	mv ./*.deb "$pkg_directory/"
 
 	popd &>/dev/null
 	rm -rf "$tmp_directory"
 }
 
-function build_delphix_java8_debs()
-{
+function build_delphix_java8_debs() {
 	local pkg_directory="$1"
 
 	local url="http://artifactory.delphix.com/artifactory"
 	local tarfile="jdk-8u131-linux-x64.tar.gz"
 	local jcefile="jce_policy-8.zip"
 	local debfile="oracle-java8-jdk_8u131_amd64.deb"
+	local tmp_directory
 
-	local tmp_directory=$(mktemp -d -p "$PWD" tmp.java.XXXXXXXXXX)
+	tmp_directory=$(mktemp -d -p "$PWD" tmp.java.XXXXXXXXXX)
 	pushd "$tmp_directory" &>/dev/null
 
 	wget -nv "$url/java-binaries/linux/jdk/8/$tarfile" -O "$tarfile"
@@ -113,7 +113,7 @@ function build_delphix_java8_debs()
 	#
 	chown -R nobody:nogroup .
 	runuser -u nobody -- \
-		fakeroot make-jpkg --jce-policy "$jcefile" "$tarfile" <<< y
+		fakeroot make-jpkg --jce-policy "$jcefile" "$tarfile" <<<y
 
 	cp "$debfile" "$pkg_directory"
 
@@ -121,8 +121,7 @@ function build_delphix_java8_debs()
 	rm -rf "$tmp_directory"
 }
 
-function build_ancillary_repository()
-{
+function build_ancillary_repository() {
 	local pkg_directory="$1"
 
 	rm -rf "$HOME/.aptly"
@@ -133,10 +132,10 @@ function build_ancillary_repository()
 
 	rm -rf "$TOP/ancillary-repository"
 	mv "$HOME/.aptly" "$TOP/ancillary-repository"
-	cat > "$TOP/ancillary-repository/aptly.config" <<-EOF
-	{
-	    "rootDir": "$TOP/ancillary-repository"
-	}
+	cat >"$TOP/ancillary-repository/aptly.config" <<-EOF
+		{
+		    "rootDir": "$TOP/ancillary-repository"
+		}
 	EOF
 }
 

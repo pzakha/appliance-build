@@ -26,6 +26,7 @@ fi
 # gather debs for all pacakges installed on the image.
 #
 mkdir binary/packages
+# shellcheck disable=SC2016
 chroot binary bash -c \
 	'dpkg-query -Wf "\${Package}=\${Version}\\n" >/packages/all-packages.list'
 chroot binary bash -c "cd packages && xargs -a all-packages.list apt download"
