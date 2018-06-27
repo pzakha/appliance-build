@@ -22,8 +22,6 @@ if [[ -z "$TOP" ]]; then
 	exit 1
 fi
 
-. "$TOP/scripts/functions.sh"
-
 if [[ $EUID -ne 0 ]]; then
 	echo "This script must be run as root." 1>&2
 	exit 1
@@ -40,6 +38,7 @@ if [[ "$1" != "base" ]] && [[ ! -d "live-build/variants/$1" ]]; then
 fi
 
 set -o errexit
+set -o pipefail
 
 #
 # Allow the appliance username and password to be configured via these
@@ -64,15 +63,37 @@ else
 fi
 
 #
-# We must serve delphix-repo as it will be used by live-build to install
-# Delphix packages.
+# The ancillary repository contains all of the first-party Delphix
+# packages that are required for live-build to operate properly.
 #
-aptly_serve "$TOP/ancillary-repository/aptly.config"
+
+aptly serve -config="$TOP/ancillary-repository/aptly.config" &
+APTLY_SERVE_PID=$!
+
+#
+# We need to wait for the Aptly server to be ready before we proceed;
+# this can take a few seconds, so we retry until it succeeds.
+#
+set +o errexit
+attempts=0
+while ! curl --output /dev/null --silent --head --fail \
+		"http://localhost:8080/dists/bionic/Release"; do
+	(( attempts++ ))
+	if [[ $attempts -gt 30 ]]; then
+		echo "Timed out waiting for ancillary repository." 1>&2
+		kill $APTLY_SERVE_PID
+		exit 1
+	fi
+
+	sleep 1
+done
+set -o errexit
+
 
 lb config
 lb build
 
-aptly_stop_serving
+kill $APTLY_SERVE_PID
 
 #
 # On failure, the "lb build" command above doesn't actually return a

@@ -36,8 +36,6 @@ if [[ -z "$TOP" ]]; then
 	exit 1
 fi
 
-. "$TOP/scripts/functions.sh"
-
 set -o xtrace
 set -o errexit
 set -o pipefail
@@ -127,13 +125,11 @@ function build_ancillary_repository()
 {
 	local pkg_directory="$1"
 
-	setup_gpg_key "$TOP/keys/dlpx-test-priv.gpg"
-
 	rm -rf "$HOME/.aptly"
 	aptly repo create \
 		-distribution=bionic -component=main ancillary-repository
 	aptly repo add ancillary-repository "$pkg_directory"
-	aptly publish repo -passphrase delphix ancillary-repository
+	aptly publish repo -skip-signing ancillary-repository
 
 	rm -rf "$TOP/ancillary-repository"
 	mv "$HOME/.aptly" "$TOP/ancillary-repository"

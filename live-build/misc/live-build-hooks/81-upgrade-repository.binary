@@ -22,8 +22,6 @@ if [[ -z "$TOP" ]]; then
 	exit 1
 fi
 
-. "$TOP/scripts/functions.sh"
-
 #
 # gather debs for all pacakges installed on the image.
 #
@@ -71,11 +69,10 @@ rm delphix-entire-control
 # We first clear any remnants from the previous run
 #
 rm -rf "$HOME/.aptly"
-setup_gpg_key "$TOP/keys/dlpx-test-priv.gpg"
 aptly repo create -distribution=bionic -component=dlpx upgrade-repo
 aptly repo add upgrade-repo binary/packages
 aptly repo add upgrade-repo delphix-entire*.deb
-aptly publish repo -batch -passphrase=delphix upgrade-repo
+aptly publish repo -skip-signing upgrade-repo
 rm delphix-entire*.deb
 
 tar cf "${APPLIANCE_VARIANT}.repo" -C "$HOME" .aptly \

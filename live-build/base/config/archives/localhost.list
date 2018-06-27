@@ -15,10 +15,11 @@
 #
 
 #
-# We create an ancillary repository with all Delphix packages before kicking
-# off live-build. We serve it locally using aptly.
-#
-# Note that delphix.key is a copy from /keys/dlpx-test-pub.gpg
+# This corresponds to the ancillary repository that must be generated
+# and served using Aptly prior to running live-build. For more details,
+# please refert to the "build-ancillary-repository.sh" script, which is
+# used to build the repository, and the "run-live-build.sh" which is
+# used to serve the repository.
 #
 
-deb http://localhost:8080 bionic main
+deb [trusted=yes] http://localhost:8080 bionic main
