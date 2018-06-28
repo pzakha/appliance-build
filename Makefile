@@ -29,7 +29,6 @@ FINDEXEC := $(FINDEXEC.$(shell uname -s))
 	ansiblecheck \
 	base \
 	check \
-	metapackages \
 	shellcheck \
 	shfmtcheck \
 	$(ALL_VARIANTS)
@@ -53,11 +52,6 @@ $(ALL_VARIANTS): base
 
 ancillary-repository:
 	./scripts/build-ancillary-repository.sh
-
-metapackages:
-	cd metapackages && germinate-update-metapackage --nodch
-	cd metapackages && dpkg-buildpackage
-	cd metapackages && lintian
 
 shellcheck:
 	shellcheck --exclude=SC1091 \
