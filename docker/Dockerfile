@@ -33,18 +33,13 @@ RUN \
       aptly \
       awscli \
       coreutils \
-      debhelper \
-      debootstrap \
-      dpkg-dev \
       equivs \
       gdisk \
-      germinate \
       git \
       java-package \
       jq \
       kpartx \
       libxt6 \
-      lintian \
       livecd-rootfs \
       make \
       man \
