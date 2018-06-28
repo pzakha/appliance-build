@@ -44,7 +44,7 @@ set -o pipefail
 mkdir -p /packages
 cd /packages
 
-dpkg-query -Wf '${Package}=${Version}\n' | xargs apt download
+dpkg-query -Wf '${Package}=${Version}\n' | xargs apt-get download
 EOF
 
 #
