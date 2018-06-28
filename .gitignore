@@ -1,7 +1,1 @@
-*.deb
-*.dsc
-*.tar.xz
-*.buildinfo
-*.changes
-
 ancillary-repository
