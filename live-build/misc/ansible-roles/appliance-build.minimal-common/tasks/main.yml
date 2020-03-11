@@ -56,15 +56,3 @@
 - file:
     path: /etc/issue
     state: absent
-
-- shell: ls /lib/modules
-  register: kernel_versions
-
-- apt:
-    name: 'linux-image-{{ item }}-dbgsym'
-  with_items:
-    - '{{ kernel_versions.stdout_lines }}'
-  retries: 3
-  delay: 30
-  register: result
-  until: result is succeeded
