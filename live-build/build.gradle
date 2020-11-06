@@ -29,6 +29,7 @@ task ancillaryRepository(type: Exec) {
         // Files that are modified when we serve from this apt repo
         exclude "db/"
     }
+    outputs.file "${buildDir}/build-info"
 
     commandLine "${rootProject.projectDir}/scripts/build-ancillary-repository.sh"
 }
@@ -98,6 +99,7 @@ for (variant in allVariants) {
                 inputs.dir "${projectDir}/misc"
                 inputs.dir "${projectDir}/variants"
                 inputs.file "${rootProject.projectDir}/scripts/run-live-build.sh"
+                inputs.file "${buildDir}/build-info"
 
                 for (envVar in ["APPLIANCE_PASSWORD",
                                 "DELPHIX_APPLIANCE_VERSION",

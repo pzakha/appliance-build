@@ -41,6 +41,7 @@ set -o errexit
 set -o pipefail
 
 OUTPUT_DIR=$TOP/live-build/build/ancillary-repository
+BUILD_INFO_FILE=$TOP/live-build/build/build-info
 
 function build_ancillary_repository() {
 	local pkg_directory="$1"
@@ -59,6 +60,52 @@ function build_ancillary_repository() {
 		    "rootDir": "$OUTPUT_DIR"
 		}
 	EOF
+}
+
+function compile_build_info() {
+	local metadir="$1"
+
+	echo "----------------------------------------"
+	echo "APPLIANCE-BUILD ENV"
+	echo "----------------------------------------"
+	echo "APPLIANCE_BUILD_GIT_URL: $APPLIANCE_BUILD_GIT_URL"
+	echo "APPLIANCE_BUILD_GIT_BRANCH: $APPLIANCE_BUILD_GIT_BRANCH"
+	echo "DELPHIX_PACKAGE_MIRROR_MAIN: $DELPHIX_PACKAGE_MIRROR_MAIN"
+	echo "DELPHIX_PACKAGE_MIRROR_SECONDARY: $DELPHIX_PACKAGE_MIRROR_SECONDARY"
+	echo "AWS_S3_OUTPUT: $AWS_S3_OUTPUT"
+	echo "DELPHIX_APPLIANCE_VERSION: $DELPHIX_APPLIANCE_VERSION"
+	echo
+	echo "----------------------------------------"
+	echo "COMPONENTS"
+	echo "----------------------------------------"
+	[[ -f "$metadir/COMPONENTS" ]] && cat "$metadir/COMPONENTS"
+	echo
+	echo "----------------------------------------"
+	echo "KERNEL VERSIONS"
+	echo "----------------------------------------"
+	[[ -f "$metadir/KERNEL_VERSIONS" ]] && cat "$metadir/KERNEL_VERSIONS"
+	echo
+	echo "----------------------------------------"
+	echo "PACKAGES"
+	echo "----------------------------------------"
+	cd "$metadir/packages" || return
+	for subdir in */; do
+		pushd "$subdir" &>/dev/null
+		echo "Package ${subdir%/}"
+		echo
+		if [[ -f metadata.json ]]; then
+			cat metadata.json
+			echo
+		fi
+		[[ -f BUILD_INFO ]] && cat BUILD_INFO
+		[[ -f PACKAGE_MIRROR_URL_MAIN ]] &&
+			echo "Main miror: $(cat PACKAGE_MIRROR_URL_MAIN)"
+		[[ -f PACKAGE_MIRROR_URL_SECONDARY ]] &&
+			echo "Secondary miror: $(cat PACKAGE_MIRROR_URL_SECONDARY)"
+		echo
+		echo "----------------------------------------"
+		popd &>/dev/null
+	done
 }
 
 #
@@ -119,23 +166,45 @@ AWS_S3_URI_COMBINED_PACKAGES=$(resolve_s3_uri \
 	"$AWS_S3_URI_COMBINED_PACKAGES" "" \
 	"devops-gate/master/linux-pkg/${UPSTREAM_BRANCH}/combine-packages/post-push/latest")
 
+mkdir -p "$TOP/build"
+WORK_DIRECTORY=$(mktemp -d -p "$TOP/build" tmp.pkgs.XXXXXXXXXX)
+
 #
 # All package files will be placed into this temporary directory, such
 # that we can later point Aptly at this directory to build the Aptly/APT
 # repository.
 #
-mkdir -p "$TOP/build"
-PKG_DIRECTORY=$(mktemp -d -p "$TOP/build" tmp.pkgs.XXXXXXXXXX)
+PKG_DIRECTORY="$WORK_DIRECTORY/debs/"
+mkdir -p "$PKG_DIRECTORY"
 
 #
-# Now that we've determined the URI of the Delphix-built packages, we can
-# download them.
+# Download all the packages and the associated metadata from the
+# combined-packages S3 location.
 #
-download_delphix_s3_debs_multidir "$PKG_DIRECTORY" "$AWS_S3_URI_COMBINED_PACKAGES/packages"
+aws s3 sync --only-show-errors "$AWS_S3_URI_COMBINED_PACKAGES" "$WORK_DIRECTORY"
+
+#
+# Prepare a build-info file while we have access to the downloaded build
+# metadata files. Later in the build this file will be included in the
+# delphix-entire package.
+#
+compile_build_info "$WORK_DIRECTORY" >"$BUILD_INFO_FILE"
+
+#
+# Visit each package's sub-directory and move all the .deb and .ddeb files to
+# PKG_DIRECTORY.
+#
+cd "$WORK_DIRECTORY/packages"
+for subdir in */; do
+	pushd "$subdir" &>/dev/null
+	sha256sum -c --strict SHA256SUMS
+	mv ./*deb "$PKG_DIRECTORY/"
+	popd &>/dev/null
+done
 
 #
 # Now that our temporary package directory has been populated with all
-# first-party packages needed by live-build, we use this directory to
+# the packages built by Delphix, we use this directory to
 # build up our Aptly/APT ancillary repository. After this function
 # completes, there should be a directory named "ancillary-repository" at
 # the top level of the git repository, that can later be "aptly
