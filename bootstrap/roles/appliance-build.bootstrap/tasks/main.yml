@@ -44,6 +44,10 @@
       - zfsutils-linux
     state: present
 
+- patch:
+    src: vmtools_version.patch
+    dest: /usr/share/livecd-rootfs/live-build/functions
+
 - modprobe:
     name: zfs
     state: present
