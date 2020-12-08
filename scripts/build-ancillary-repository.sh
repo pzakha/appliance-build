@@ -170,46 +170,32 @@ mkdir -p "$TOP/build"
 WORK_DIRECTORY=$(mktemp -d -p "$TOP/build" tmp.pkgs.XXXXXXXXXX)
 
 #
-# All package files will be placed into this temporary directory, such
-# that we can later point Aptly at this directory to build the Aptly/APT
-# repository.
+# Download all package artifacts built by Delphix, which includes debs and
+# metadata.
 #
-PKG_DIRECTORY="$WORK_DIRECTORY/debs/"
-mkdir -p "$PKG_DIRECTORY"
-
-#
-# Download all the packages and the associated metadata from the
-# combined-packages S3 location.
-#
-aws s3 sync --only-show-errors "$AWS_S3_URI_COMBINED_PACKAGES" "$WORK_DIRECTORY"
+mkdir -p "$WORK_DIRECTORY/artifacts"
+download_combined_packages_artifacts "$AWS_S3_URI_COMBINED_PACKAGES" \
+	"$WORK_DIRECTORY/artifacts"
 
 #
 # Prepare a build-info file while we have access to the downloaded build
 # metadata files. Later in the build this file will be included in the
 # delphix-entire package.
 #
-compile_build_info "$WORK_DIRECTORY" >"$BUILD_INFO_FILE"
+compile_build_info "$WORK_DIRECTORY/artifacts" >"$BUILD_INFO_FILE"
 
 #
-# Visit each package's sub-directory and move all the .deb and .ddeb files to
-# PKG_DIRECTORY.
+# Find all debs and put them into a directory that will be fed into Aptly.
 #
-cd "$WORK_DIRECTORY/packages"
-for subdir in */; do
-	pushd "$subdir" &>/dev/null
-	sha256sum -c --strict SHA256SUMS
-	mv ./*deb "$PKG_DIRECTORY/"
-	popd &>/dev/null
-done
+mkdir -p "$WORK_DIRECTORY/debs"
+extract_debs_into_dir "$WORK_DIRECTORY/artifacts" "$WORK_DIRECTORY/debs"
 
 #
-# Now that our temporary package directory has been populated with all
-# the packages built by Delphix, we use this directory to
-# build up our Aptly/APT ancillary repository. After this function
+# Build up our Aptly/APT ancillary repository. After this function
 # completes, there should be a directory named "ancillary-repository" at
 # the top level of the git repository, that can later be "aptly
 # serve"-ed and consumed by live-build.
 #
-build_ancillary_repository "$PKG_DIRECTORY"
+build_ancillary_repository "$WORK_DIRECTORY/debs"
 
-rm -rf "$PKG_DIRECTORY"
+rm -rf "$WORK_DIRECTORY"

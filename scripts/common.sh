@@ -72,3 +72,88 @@ function download_delphix_s3_debs() {
 	popd &>/dev/null
 	rm -rf "$tmp_directory"
 }
+
+#
+# Given an S3 URI pointing to combined-packages artifacts, download all of its
+# artifacts to target directory. If a package name is passed as an argument,
+# then only copy the artifacts for that package.
+#
+# When the combine-packages Jenkins job generates artifacts, it does not
+# copy around the artifacts for individual packages. Rather, it creates a
+# COMPONENTS file that has links to each package's artifacts.
+#
+# When appliance-build is ran via Jenkins, the Jenkins job copies the original
+# combined-packages artifacts to a new S3 location, then dereferences the
+# COMPONENTS file and copies all individual package artifacts into a
+# "packages" directory created under that new S3 location. Jenkins then passes
+# that combined-packages URI to live-build.
+#
+# Thus if a "packages" directory is found under the combined-packages S3 URI,
+# we assume that the dereferencing has already been done and so we just sync
+# the whole directory. Otherwise, we must dereference the COMPONENTS file here
+# and fetch the artifacts for each package.
+#
+# Here are the files that are expected to be found after the download.
+# <combined packages base directory>/
+#   COMPONENTS
+#   ... (some other metadata files)
+#   packages/
+#     package1/
+#		... (package 1 artifacts)
+#     package2/
+#		... (package 2 artifacts)
+#     ... (remaining packages artifacts)
+#
+# shellcheck disable=SC2164
+function download_combined_packages_artifacts() {
+	local combined_pkgs_uri="$1"
+	local target_dir="$2"
+	local pkg="$3"
+	
+	pushd "$target_dir" &>/dev/null
+
+	if [[ -n "$pkg" ]]; then
+		aws s3 sync --exclude 'packages/*' --include "packages/$pkg/*" \
+			--only-show-errors "$combined_pkgs_uri" .
+	else
+		aws s3 sync --only-show-errors "$combined_pkgs_uri" .
+	fi
+
+	if [[ -d packages ]]; then
+		popd &>/dev/null
+		return
+	fi
+
+	[[ -f COMPONENTS ]] || die "COMPONENTS file missing."
+	mkdir packages
+	pushd packages &>/dev/null
+
+	local pkgname s3uri
+	while read -r line; do
+		pkgname=$(echo "$line" | cut -d: -f 1 | tr -d '[:space:]')
+		s3uri=$(echo "$line" | cut -d: -f 2- | tr -d '[:space:]')
+		[[ -n "$pkg" ]] && [[ "$pkg" != "$pkgname" ]] && continue
+		mkdir "$pkgname"
+		pushd "$pkgname" &>/dev/null
+		aws s3 sync --only-show-errors "$s3uri" .
+		sha256sum -c --strict SHA256SUMS
+		popd &>/dev/null
+	done <../COMPONENTS
+
+	popd &>/dev/null
+	popd &>/dev/null
+}
+
+#
+# Find all .deb and .ddeb packages in source directory tree and move them
+# to target directory.
+#
+function extract_debs_into_dir() {
+	local source_dir="$1"
+	local target_dir="$2"
+
+	[[ -d "$target_dir" ]] ||
+		die "'$target_dir' must be an existing directory"
+	find "$source_dir" -name '*.deb' -exec mv {} "$target_dir" \;
+	find "$source_dir" -name '*.ddeb' -exec mv {} "$target_dir" \;
+}
