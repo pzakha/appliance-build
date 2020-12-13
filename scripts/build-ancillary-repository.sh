@@ -41,6 +41,7 @@ set -o errexit
 set -o pipefail
 
 OUTPUT_DIR=$TOP/live-build/build/ancillary-repository
+BUILD_INFO_FILE=$TOP/live-build/build/build-info
 
 function build_ancillary_repository() {
 	local pkg_directory="$1"
@@ -59,6 +60,52 @@ function build_ancillary_repository() {
 		    "rootDir": "$OUTPUT_DIR"
 		}
 	EOF
+}
+
+function compile_build_info() {
+	local metadir="$1"
+
+	echo "----------------------------------------"
+	echo "APPLIANCE-BUILD ENV"
+	echo "----------------------------------------"
+	echo "APPLIANCE_BUILD_GIT_URL: $APPLIANCE_BUILD_GIT_URL"
+	echo "APPLIANCE_BUILD_GIT_BRANCH: $APPLIANCE_BUILD_GIT_BRANCH"
+	echo "DELPHIX_PACKAGE_MIRROR_MAIN: $DELPHIX_PACKAGE_MIRROR_MAIN"
+	echo "DELPHIX_PACKAGE_MIRROR_SECONDARY: $DELPHIX_PACKAGE_MIRROR_SECONDARY"
+	echo "AWS_S3_OUTPUT: $AWS_S3_OUTPUT"
+	echo "DELPHIX_APPLIANCE_VERSION: $DELPHIX_APPLIANCE_VERSION"
+	echo
+	echo "----------------------------------------"
+	echo "COMPONENTS"
+	echo "----------------------------------------"
+	[[ -f "$metadir/COMPONENTS" ]] && cat "$metadir/COMPONENTS"
+	echo
+	echo "----------------------------------------"
+	echo "KERNEL VERSIONS"
+	echo "----------------------------------------"
+	[[ -f "$metadir/KERNEL_VERSIONS" ]] && cat "$metadir/KERNEL_VERSIONS"
+	echo
+	echo "----------------------------------------"
+	echo "PACKAGES"
+	echo "----------------------------------------"
+	cd "$metadir/packages" || return
+	for subdir in */; do
+		pushd "$subdir" &>/dev/null
+		echo "Package ${subdir%/}"
+		echo
+		if [[ -f metadata.json ]]; then
+			cat metadata.json
+			echo
+		fi
+		[[ -f BUILD_INFO ]] && cat BUILD_INFO
+		[[ -f PACKAGE_MIRROR_URL_MAIN ]] &&
+			echo "Main miror: $(cat PACKAGE_MIRROR_URL_MAIN)"
+		[[ -f PACKAGE_MIRROR_URL_SECONDARY ]] &&
+			echo "Secondary miror: $(cat PACKAGE_MIRROR_URL_SECONDARY)"
+		echo
+		echo "----------------------------------------"
+		popd &>/dev/null
+	done
 }
 
 #
@@ -110,6 +157,13 @@ WORK_DIRECTORY=$(mktemp -d -p "$TOP/build" tmp.pkgs.XXXXXXXXXX)
 mkdir -p "$WORK_DIRECTORY/artifacts"
 download_combined_packages_artifacts "$AWS_S3_URI_COMBINED_PACKAGES" \
 	"$WORK_DIRECTORY/artifacts"
+
+#
+# Prepare a build-info file while we have access to the downloaded build
+# metadata files. Later in the build this file will be included in the
+# delphix-entire package.
+#
+compile_build_info "$WORK_DIRECTORY/artifacts" >"$BUILD_INFO_FILE"
 
 #
 # Find all debs and put them into a directory that will be fed into Aptly.
