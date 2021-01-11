@@ -70,6 +70,7 @@ function compile_build_info() {
 	echo "----------------------------------------"
 	echo "APPLIANCE_BUILD_GIT_URL: $APPLIANCE_BUILD_GIT_URL"
 	echo "APPLIANCE_BUILD_GIT_BRANCH: $APPLIANCE_BUILD_GIT_BRANCH"
+	echo "appliance-build git hash: $(cd "$TOP" && git rev-parse HEAD)"
 	echo "DELPHIX_PACKAGE_MIRROR_MAIN: $DELPHIX_PACKAGE_MIRROR_MAIN"
 	echo "DELPHIX_PACKAGE_MIRROR_SECONDARY: $DELPHIX_PACKAGE_MIRROR_SECONDARY"
 	echo "AWS_S3_OUTPUT: $AWS_S3_OUTPUT"
